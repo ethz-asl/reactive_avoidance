@@ -1,0 +1,18 @@
+<launch>
+
+    <node pkg="rmpcpp_planner" name="rmpcpp_planner_lidarnode" type="rmpcpp_planner_lidarnode" clear_params="true" output="screen">
+	<param name="r" value = "1.3" />
+		<param name="c_softmax_obstacle" value="1.0" />
+		<param name="epsilon_damp" value ="0.001" />
+	<param name="eta_damp" value="3" />
+	<param name="eta_rep" value ="1.2" />
+        <param name="v_rep" value= "1.4" />
+
+		<param name="alpha_goal" value="0.8" />
+		<param name="beta_goal" value="1.6" />
+	<remap from="points" to="/owl/ouster/points" />
+        <remap from="odometry" to="/owl/msf_core/odometry" />
+	<remap from="trajectory" to="/owl/command/trajectory" />
+    </node>
+
+</launch>

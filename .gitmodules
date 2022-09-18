@@ -1,0 +1,3 @@
+[submodule "rmpcpp_planner/nvblox"]
+	path = rmpcpp_planner/nvblox
+	url = git@github.com:Isarm/nvblox.git

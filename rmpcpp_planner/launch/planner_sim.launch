@@ -1,0 +1,9 @@
+<launch>
+
+    <node pkg="rmpcpp_planner" name="rmpcpp_planner_lidarnode" type="rmpcpp_planner_lidarnode" clear_params="true" output="screen">
+        <remap from="points" to="/firefly/os1/ouster_points" />
+        <remap from="odometry" to="/firefly/ground_truth/odometry" />
+        <remap from="trajectory" to="/firefly/command/trajectory" />
+    </node>
+
+</launch>

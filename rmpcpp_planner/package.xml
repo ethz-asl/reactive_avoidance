@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="2">
+    <name>rmpcpp_planner</name>
+    <version>0.0.0</version>
+    <description>rmpcpp planner</description>
+
+    <author email="imeijer@student.ethz.ch">Isar Meijer</author>
+    <author email="mpantic@ethz.ch">Michael Pantic</author>
+    <maintainer email="imeijer@student.ethz.ch">Isar Meijer</maintainer>
+    <maintainer email="mpantic@ethz.ch">Michael Pantic</maintainer>
+
+    <license>BSD</license>
+
+    <buildtool_depend>catkin</buildtool_depend>
+    <buildtool_depend>catkin_simple</buildtool_depend>
+
+    <depend>roscpp</depend>
+	<depend>eigen_catkin</depend>
+    <depend>eigen_conversions</depend>
+    <depend>dynamic_reconfigure</depend>
+</package>

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>rmpcpp_ros</name>
+  <version>0.0.0</version>
+  <description>ROS helpers for RMPCPP</description>
+
+  <author email="michael.pantic@mavt.ethz.ch">Michael Pantic</author>
+  <maintainer email="michael.pantic@mavt.ethz.ch">Michael Pantic</maintainer>
+
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>catkin_simple</buildtool_depend>
+
+  <depend>roscpp</depend>
+  <depend>eigen_catkin</depend>
+  <depend>rmpcpp</depend>
+  <depend>rmpcpp_planner</depend>
+  <depend>sensor_msgs</depend>
+  <depend>visualization_msgs</depend>
+</package>
+

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>rmpcpp</name>
+  <version>0.0.0</version>
+  <description>Base implementation of Riemannian Motion Policies in CPP</description>
+
+  <author email="michael.pantic@mavt.ethz.ch">Michael Pantic</author>
+  <maintainer email="michael.pantic@mavt.ethz.ch">Michael Pantic</maintainer>
+
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>catkin_simple</buildtool_depend>
+
+  <depend>roscpp</depend>
+  <depend>eigen_catkin</depend>
+</package>
