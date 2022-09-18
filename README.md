@@ -56,4 +56,7 @@ The `tester` class sets up testing runs, using the `worldgen` class to generate 
 There are a lot of options you can pass to the executable, which are all defined in the `parser` class. 
 Check out `rmpcpp_planner/src/testing/parser.cc` for the full list of options. 
 
+# nvblox
+Some of our code heavily depends on nvblox - check it out here: https://github.com/nvidia-isaac/nvblox, its a great open-source package for 3D mapping on robots.
+
 
