@@ -76,17 +76,4 @@ inline float __device__ __host__ w(const float d, const float r) {
   return (1.0f / (r * r)) * d * d - (2.0f / r) * d + 1.0f;
 }
 
-template <typename Vector>
-inline float __device__ __host__ calculatePStuck(const float distance,
-                                                 const Vector& velocity,
-                                                 const Vector& direction,
-                                                 const float v_rep) {
-  float proj = (velocity.dot(direction) /
-                sqrt(velocity.squaredNorm() * direction.squaredNorm()));
-  if (proj < 0) {
-    return 0.0f;
-  }
-  return proj * exp(-distance / v_rep);
-}
-
 #endif  // RMPCPP_PLANNER_MISC_CUH

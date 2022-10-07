@@ -18,7 +18,7 @@ class Parser {
 
  private:
   ParametersWrapper getRMPParameters();
-  po::variables_map opts;
+  po::variables_map opts_;
 };
 
 #endif  // RMPCPP_PLANNER_PARSER_H

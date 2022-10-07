@@ -48,26 +48,26 @@ class NVBloxWorld : public World<Space> {
   virtual ~NVBloxWorld() = default;
   NVBloxWorld() = delete;
   NVBloxWorld(const float truncation_distance)
-      : truncation_distance(truncation_distance){};
+      : truncation_distance_(truncation_distance){};
 
   bool collision(const Vector& pos) override {
-    return collision(pos, tsdf_layer.get());
+    return collision(pos, tsdf_layer_.get());
   };
   static bool collision(const Vector& pos, nvblox::TsdfLayer* layer);
   double distanceToObstacle(const Vector& pos) {
-    return distanceToObstacle(pos, esdf_layer.get());
+    return distanceToObstacle(pos, esdf_layer_.get());
   };
   static double distanceToObstacle(const Vector& pos, nvblox::EsdfLayer* layer);
   Vector gradientToObstacle(const Vector& pos);
 
   void setTsdfLayer(const nvblox::TsdfLayer::Ptr newlayer) {
-    tsdf_layer = newlayer;
+    tsdf_layer_ = newlayer;
   };
   void setEsdfLayer(const nvblox::EsdfLayer::Ptr newlayer) {
-    esdf_layer = newlayer;
+    esdf_layer_ = newlayer;
   };
-  nvblox::EsdfLayer* getEsdfLayer() { return esdf_layer.get(); };
-  nvblox::TsdfLayer* getTsdfLayer() { return tsdf_layer.get(); };
+  nvblox::EsdfLayer* getEsdfLayer() { return esdf_layer_.get(); };
+  nvblox::TsdfLayer* getTsdfLayer() { return tsdf_layer_.get(); };
 
   bool checkMotion(const Vector& s1, const Vector& s2) const;
 
@@ -79,10 +79,10 @@ class NVBloxWorld : public World<Space> {
   double getDensity();
 
  protected:
-  std::shared_ptr<nvblox::EsdfLayer> esdf_layer;
-  std::shared_ptr<nvblox::TsdfLayer> tsdf_layer;
+  std::shared_ptr<nvblox::EsdfLayer> esdf_layer_;
+  std::shared_ptr<nvblox::TsdfLayer> tsdf_layer_;
 
-  const float truncation_distance;
+  const float truncation_distance_;
 };
 
 }  // namespace rmpcpp

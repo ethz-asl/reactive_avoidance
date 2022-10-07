@@ -1,6 +1,8 @@
 #ifndef RMPCPP_PLANNER_PLANNER_BASE_H
 #define RMPCPP_PLANNER_PLANNER_BASE_H
 
+#include <rmpcpp_planner/core/trajectory_rmp.h>
+
 #include <numeric>
 
 #include "Eigen/Dense"
@@ -22,53 +24,35 @@ class PlannerBase {
   PlannerBase() = default;
   virtual ~PlannerBase() = default;
   explicit PlannerBase(std::unique_ptr<rmpcpp::NVBloxWorld<Space>> world) {
-    this->world = std::move(world);
+    this->world_ = std::move(world);
   };
 
   /** Pure virtual */
-  virtual void plan(const rmpcpp::State<Space::dim>& start) = 0;
-  virtual double getShortestLengthToGoal() = 0;
-  virtual int getShortestLengthToGoalDiscrete() = 0;
-  virtual double getSmoothnessToGoal() = 0;
+  virtual void plan(const rmpcpp::State<Space::dim>& start,
+                    const Vector& end) = 0;
 
   virtual void setGoal(const Vector& new_goal) {
-    this->world->setGoal(new_goal);
+    this->world_->setGoal(new_goal);
   };
   void setTsdf(const nvblox::TsdfLayer::Ptr& tsdflayer) {
-    this->world->setTsdfLayer(tsdflayer);
+    this->world_->setTsdfLayer(tsdflayer);
   };
   void setEsdf(const nvblox::EsdfLayer::Ptr& esdflayer) {
-    this->world->setEsdfLayer(esdflayer);
+    this->world_->setEsdfLayer(esdflayer);
   };
 
-  bool reachedGoal() { return goal_reached; };
-  int totalSteps() { return total_steps; };
+  bool success() const { return goal_reached_ && !diverged_ && !collided_; };
+
+  virtual bool hasTrajectory() const = 0;
+  virtual const std::shared_ptr<TrajectoryRMP<Space>> getTrajectory() const = 0;
 
  protected:
-  std::unique_ptr<rmpcpp::NVBloxWorld<Space>> world;
+  std::unique_ptr<rmpcpp::NVBloxWorld<Space>> world_;
 
-  bool goal_reached = false;
-  int total_steps = 0;  // Integration steps
-
-  /**
-   * Get the length from a trajectory vector
-   * @param trajectory n-dimensional position vector
-   * @return length
-   */
-  double lengthFromTrajectory(const std::vector<Vector>& trajectory) {
-    using AccType =
-        typename std::pair<Vector, double>;  // Custom accumulator type: (last
-                                             // position, current length)
-    AccType acc = {trajectory[0], 0.0};
-    /** Accumulate length starting from the starting position and length = 0 */
-    return std::accumulate(
-               trajectory.cbegin(), trajectory.cend(), acc,
-               [](AccType& acc, const Vector& v) {  // Lambda accumulator
-                 double d_length = (v - acc.first).norm();
-                 return AccType(v, acc.second + d_length);
-               })
-        .second;
-  }
+  double goal_tolerance_ = 0.05;
+  bool collided_ = false;
+  bool goal_reached_ = false;
+  bool diverged_ = false;
 };
 
 }  // namespace rmpcpp

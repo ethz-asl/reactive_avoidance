@@ -48,7 +48,8 @@ __device__ thrust::pair<float, bool> cast(
                                     &voxel_ptr) ||
         !isTsdfVoxelValid(*voxel_ptr)) {
       // 1) We weren't in observed space before this, let's step through this
-      // (unobserved) stuff and hope to hit something allocated.
+      // (unobserved) st
+      // uff and hope to hit something allocated.
       if (!last_distance_positive) {
         // step forward by the truncation distance
         step = truncation_distance_m;
@@ -217,17 +218,17 @@ template <class Space>
 rmpcpp::RaycastingCudaPolicy<Space>::RaycastingCudaPolicy(
     WorldPolicyParameters *params, nvblox::TsdfLayer *layer,
     NVBloxWorldRMP<Space> *world)
-    : layer(layer),
-      parameters(*dynamic_cast<RaycastingCudaPolicyParameters *>(params)),
-      world(world) {
-  cudaStreamCreate(&stream);
-  const int blockdim = parameters.N_sqrt / BLOCKSIZE;
+    : layer_(layer),
+      parameters_(*dynamic_cast<RaycastingCudaPolicyParameters *>(params)),
+      world_(world) {
+  cudaStreamCreate(&stream_);
+  const int blockdim = parameters_.N_sqrt / BLOCKSIZE;
   /** Somehow trying to malloc device memory here and only deleting it at the
    * end in the destructor, instead of redoing it every integration step does
    * not work. So we only do this for the host memory, which does work
    */
-  cudaMallocHost(&metric_sum, sizeof(Eigen::Matrix3f) * blockdim * blockdim);
-  cudaMallocHost(&metric_x_force_sum,
+  cudaMallocHost(&metric_sum_, sizeof(Eigen::Matrix3f) * blockdim * blockdim);
+  cudaMallocHost(&metric_x_force_sum_,
                  sizeof(Eigen::Vector3f) * blockdim * blockdim);
 }
 template rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<2>>::RaycastingCudaPolicy(
@@ -254,27 +255,27 @@ void rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<3>>::cudaStartEval(
   Eigen::Vector3f vel = state.vel_.cast<float>();
 
   nvblox::GPULayerView<nvblox::TsdfBlock> gpu_layer_view =
-      layer->getGpuLayerView();
+      layer_->getGpuLayerView();
   const float surface_distance_epsilon =
-      parameters.surface_distance_epsilon_vox * layer->voxel_size();
+      parameters_.surface_distance_epsilon_vox * layer_->voxel_size();
 
-  const int blockdim = parameters.N_sqrt / BLOCKSIZE;
+  const int blockdim = parameters_.N_sqrt / BLOCKSIZE;
 #if OUTPUT_RAYS
   cudaMalloc((void **)&ray_endpoints_device,
              sizeof(Eigen::Vector3f) * parameters.N_sqrt * parameters.N_sqrt);
 #endif
-  cudaMalloc((void **)&metric_sum_device,
+  cudaMalloc((void **)&metric_sum_device_,
              sizeof(Eigen::Matrix3f) * blockdim * blockdim);
-  cudaMalloc((void **)&metric_x_force_sum_device,
+  cudaMalloc((void **)&metric_x_force_sum_device_,
              sizeof(Eigen::Vector3f) * blockdim * blockdim);
   constexpr dim3 kThreadsPerThreadBlock(BLOCKSIZE, BLOCKSIZE, 1);
   const dim3 num_blocks(blockdim, blockdim, 1);
-  raycastKernel<<<num_blocks, kThreadsPerThreadBlock, 0, stream>>>(
-      pos, vel, metric_sum_device, metric_x_force_sum_device,
+  raycastKernel<<<num_blocks, kThreadsPerThreadBlock, 0, stream_>>>(
+      pos, vel, metric_sum_device_, metric_x_force_sum_device_,
       gpu_layer_view.getHash().impl_,
-      parameters.truncation_distance_vox * layer->voxel_size(),
-      gpu_layer_view.block_size(), parameters.max_steps, parameters.r,
-      surface_distance_epsilon, parameters
+      parameters_.truncation_distance_vox * layer_->voxel_size(),
+      gpu_layer_view.block_size(), parameters_.max_steps, parameters_.r,
+      surface_distance_epsilon, parameters_
 #if OUTPUT_RAYS
       ,
       ray_endpoints_device
@@ -291,31 +292,31 @@ template <>
 rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<3>>::PValue
 rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<3>>::evaluateAt(
     const PState &state) {
-  if (!async_eval_started) {
+  if (!async_eval_started_) {
     cudaStartEval(state);
   }
   /** If an asynchronous eval was started, no check is done whether the state is
    * the same. (As for now this should never happen)*/
-  cudaStreamSynchronize(stream);
-  async_eval_started = false;
+  cudaStreamSynchronize(stream_);
+  async_eval_started_ = false;
 
-  const int blockdim = parameters.N_sqrt / BLOCKSIZE;
+  const int blockdim = parameters_.N_sqrt / BLOCKSIZE;
 
-  cudaMemcpy(metric_sum, metric_sum_device,
+  cudaMemcpy(metric_sum_, metric_sum_device_,
              sizeof(Eigen::Matrix3f) * blockdim * blockdim,
              cudaMemcpyDeviceToHost);
-  cudaMemcpy(metric_x_force_sum, metric_x_force_sum_device,
+  cudaMemcpy(metric_x_force_sum_, metric_x_force_sum_device_,
              sizeof(Eigen::Vector3f) * blockdim * blockdim,
              cudaMemcpyDeviceToHost);
 
-  cudaFree(metric_sum_device);
-  cudaFree(metric_x_force_sum_device);
+  cudaFree(metric_sum_device_);
+  cudaFree(metric_x_force_sum_device_);
 
   Eigen::Matrix3f sum = Eigen::Matrix3f::Zero();
   Eigen::Vector3f sumv = Eigen::Vector3f::Zero();
   for (int i = 0; i < blockdim * blockdim; i++) {
-    sum += metric_sum[i];
-    sumv += metric_x_force_sum[i];
+    sum += metric_sum_[i];
+    sumv += metric_x_force_sum_[i];
   }
   if (sum.isZero(0.001)) {  // Check if not all values are 0, leading to
                             // unstable inverse
@@ -328,8 +329,8 @@ rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<3>>::evaluateAt(
   Eigen::Vector3d sumvd_scaled = sumv.cast<double>();
 
   Eigen::Vector3d f = sumd_inverse * sumvd_scaled;
-  last_evaluated_state.pos_ = state.pos_;
-  last_evaluated_state.vel_ = state.vel_;
+  last_evaluated_state_.pos_ = state.pos_;
+  last_evaluated_state_.vel_ = state.vel_;
 
   return {f, sumd};
 }
@@ -355,7 +356,7 @@ template <class Space>
 void rmpcpp::RaycastingCudaPolicy<Space>::startEvaluateAsync(
     const PState &state) {
   cudaStartEval(state);
-  async_eval_started = true;
+  async_eval_started_ = true;
 }
 template void rmpcpp::RaycastingCudaPolicy<
     rmpcpp::Space<2>>::startEvaluateAsync(const PState &state);
@@ -368,10 +369,10 @@ template void rmpcpp::RaycastingCudaPolicy<
  */
 template <class Space>
 void rmpcpp::RaycastingCudaPolicy<Space>::abortEvaluateAsync() {
-  cudaStreamSynchronize(stream);
-  cudaFree(metric_sum_device);
-  cudaFree(metric_x_force_sum_device);
-  async_eval_started = false;
+  cudaStreamSynchronize(stream_);
+  cudaFree(metric_sum_device_);
+  cudaFree(metric_x_force_sum_device_);
+  async_eval_started_ = false;
 }
 template void
 rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<2>>::abortEvaluateAsync();

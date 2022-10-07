@@ -14,6 +14,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_FLAGS " -Wall -Wextra")
 set(CMAKE_BUILD_TYPE Release)
 
+add_compile_definitions(USE_OUSTER_LIDAR) # turn off to use sim lidar datastructure
+# see file "lidarray_CUDA.cu" for pointcloud definitions.
+
 #####################################
 #### COPIED FROM NVBLOX:
 # Suppress spammy Eigen CUDA warnings.
@@ -37,17 +40,16 @@ include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 set(SOURCES
         src/core/planner_rmp.cc
         src/core/world.cc
-        src/testing/worldgen.cc
         src/core/trajectory_rmp.cc
         src/policies/simple_ESDF.cc
         src/policies/raycasting_CUDA.cu
         src/policies/lidarray_CUDA.cu
-        src/testing/parser.cc
         src/core/world_rmp.cc)
 
 set(TESTSOURCES
         src/testing/tester.cc
-        src/testing/data_export.cc)
+        src/testing/worldgen.cc
+        src/testing/parser.cc)
 
 
 # HEADERS

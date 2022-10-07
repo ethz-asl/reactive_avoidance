@@ -10,6 +10,10 @@
 
 namespace rmpcpp {
 
+/*
+ * Implements a nvblox- map based raycasting
+ * obstacle avoidance policy
+ */
 template <class Space>
 class RaycastingCudaPolicy : public rmpcpp::WorldPolicyBase<Space> {
  public:
@@ -22,10 +26,10 @@ class RaycastingCudaPolicy : public rmpcpp::WorldPolicyBase<Space> {
                        nvblox::TsdfLayer *layer, NVBloxWorldRMP<Space> *world);
 
   ~RaycastingCudaPolicy() {
-    cudaStreamSynchronize(stream);
-    cudaStreamDestroy(stream);
-    cudaFree(metric_sum);
-    cudaFree(metric_x_force_sum);
+    cudaStreamSynchronize(stream_);
+    cudaStreamDestroy(stream_);
+    cudaFree(metric_sum_);
+    cudaFree(metric_x_force_sum_);
   }
 
   virtual PValue evaluateAt(const PState &state);
@@ -33,19 +37,19 @@ class RaycastingCudaPolicy : public rmpcpp::WorldPolicyBase<Space> {
   virtual void abortEvaluateAsync();
 
  private:
-  const nvblox::TsdfLayer *layer;
-  const RaycastingCudaPolicyParameters parameters;
-  const NVBloxWorldRMP<Space> *world = nullptr;
-
   void cudaStartEval(const PState &state);
-  PState last_evaluated_state;
 
-  bool async_eval_started = false;
-  cudaStream_t stream;
-  Eigen::Matrix3f *metric_sum_device = nullptr;
-  Eigen::Vector3f *metric_x_force_sum_device = nullptr;
-  Eigen::Matrix3f *metric_sum = nullptr;
-  Eigen::Vector3f *metric_x_force_sum = nullptr;
+  const nvblox::TsdfLayer *layer_;
+  const RaycastingCudaPolicyParameters parameters_;
+  const NVBloxWorldRMP<Space> *world_ = nullptr;
+  PState last_evaluated_state_;
+
+  bool async_eval_started_ = false;
+  cudaStream_t stream_;
+  Eigen::Matrix3f *metric_sum_device_ = nullptr;
+  Eigen::Vector3f *metric_x_force_sum_device_ = nullptr;
+  Eigen::Matrix3f *metric_sum_ = nullptr;
+  Eigen::Vector3f *metric_x_force_sum_ = nullptr;
 };
 
 }  // namespace rmpcpp

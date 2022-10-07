@@ -1,9 +1,11 @@
 
 #include "rmpcpp_planner/core/planner_rmp.h"
 
-#include "rmpcpp_planner/core/trajectory_rmp.h"
+#include <rmpcpp/core/policy_base.h>
+#include <rmpcpp/eval/trapezoidal_integrator.h>
+#include <rmpcpp/geometry/linear_geometry.h>
 
-#define N 1e2
+#include "rmpcpp_planner/core/trajectory_rmp.h"
 
 /**
  * Constructor
@@ -14,75 +16,68 @@ template <class Space>
 rmpcpp::PlannerRMP<Space>::PlannerRMP(const ParametersRMP &parameters)
     : PlannerBase<Space>(
           std::make_unique<rmpcpp::NVBloxWorldRMP<Space>>(parameters)),
-      parameters(parameters),
-      active_trajectories(CmpTrajPtrs<Space>(parameters.sort_type,
-                                             parameters.length_type,
-                                             parameters.search_heuristic)) {}
-
-template rmpcpp::PlannerRMP<rmpcpp::Space<2>>::PlannerRMP(
-    const ParametersRMP &parameters);
-template rmpcpp::PlannerRMP<rmpcpp::Space<3>>::PlannerRMP(
-    const ParametersRMP &parameters);
+      parameters_(parameters) {}
 
 /**
- * Create empty trajectory
- * @tparam Space
- * @param start
- */
-template <class Space>
-void rmpcpp::PlannerRMP<Space>::createTrajectory(
-    const rmpcpp::State<Space::dim> &start) {
-  std::unique_ptr<TrajectoryRMP<Space>> trajectory(
-      new TrajectoryRMP<Space>(this, start));
-  active_trajectories.push(trajectory.get());
-  trajectories.push_back(std::move(trajectory));
-}
-template void rmpcpp::PlannerRMP<rmpcpp::Space<2>>::createTrajectory(
-    const rmpcpp::State<2> &start);
-template void rmpcpp::PlannerRMP<rmpcpp::Space<3>>::createTrajectory(
-    const rmpcpp::State<3> &start);
 
-/**
- * Integrate all active trajectories in steps of N. Uses a priority queue to
- * determine the next trajectory to integrate
  * @tparam Space
  */
 template <class Space>
 void rmpcpp::PlannerRMP<Space>::integrate() {
-  while (!this->active_trajectories.empty()) {
-    TrajectoryRMP<Space> *trajectory = active_trajectories.top();
-    active_trajectories.pop();
+  if (!trajectory_) {
+    return;
+  }  // ignore if trajectory is not initalized.
 
-    this->total_steps += trajectory->integrate(N);
+  LinearGeometry<Space::dim> geometry;
+  TrapezoidalIntegrator<PolicyBase<Space>, LinearGeometry<Space::dim>>
+      integrator;
 
-    /** Add trajectory back to priority queue if it is still active */
-    if (trajectory->isActive()) {
-      active_trajectories.push(trajectory);
+  // start from end of current trajectory (which should always be initialized
+  // when this function is called)
+  integrator.resetTo(trajectory_->current().position,
+                     trajectory_->current().velocity);
+
+  // reset state
+  size_t num_steps = 0;
+
+  while (!this->collided_ && !this->goal_reached_ && !this->diverged_) {
+    // evaluate policies
+    auto policies = this->getWorld()->getPolicies();
+    /** Convert shared pointers to normal pointers for integration step */
+    std::vector<PolicyBase<Space> *> policiesRaw;
+    policiesRaw.reserve(policies.size());
+    std::transform(policies.cbegin(), policies.cend(),
+                   std::back_inserter(policiesRaw),
+                   [](auto &ptr) { return ptr.get(); });
+
+    // integrate
+    integrator.forwardIntegrate(policiesRaw, geometry, parameters_.dt);
+
+    // get new positions
+    Vector position, velocity, acceleration;
+    integrator.getState(position, velocity, acceleration);
+
+    // update exit conditions
+    /** Collision check */
+    if (!this->getWorld()->checkMotion(trajectory_->current().position,
+                                       position)) {
+      this->collided_ = true;
     }
-    if (this->goal_reached && parameters.terminate_upon_goal_reached) {
-      break;
+
+    if ((position - *this->getWorld()->getGoal()).norm() <
+        this->goal_tolerance_) {
+      this->goal_reached_ = true;
     }
+
+    if (num_steps > parameters_.max_length) {
+      this->diverged_ = true;
+    }
+
+    num_steps++;
+    // store results
+    trajectory_->addPoint(position, velocity, acceleration);
   }
 }
-template void rmpcpp::PlannerRMP<rmpcpp::Space<2>>::integrate();
-template void rmpcpp::PlannerRMP<rmpcpp::Space<3>>::integrate();
-
-/**
- * Register that a trajectory has reached the goal
- * @tparam Space
- * @param trajectory Trajectory that reached the goal
- */
-template <class Space>
-void rmpcpp::PlannerRMP<Space>::registerGoalReached(
-    TrajectoryRMP<Space> *trajectory) {
-  this->goal_reached = true;
-  reached_goal_trajectories.push_back(trajectory);
-}
-
-template void rmpcpp::PlannerRMP<rmpcpp::Space<2>>::registerGoalReached(
-    TrajectoryRMP<Space<2>> *trajectory);
-template void rmpcpp::PlannerRMP<rmpcpp::Space<3>>::registerGoalReached(
-    TrajectoryRMP<Space<3>> *trajectory);
 
 /**
  * Start planning run
@@ -90,64 +85,17 @@ template void rmpcpp::PlannerRMP<rmpcpp::Space<3>>::registerGoalReached(
  * @param start
  */
 template <class Space>
-void rmpcpp::PlannerRMP<Space>::plan(const rmpcpp::State<Space::dim> &start) {
-  createTrajectory(start);
+void rmpcpp::PlannerRMP<Space>::plan(const rmpcpp::State<Space::dim> &start,
+                                     const Vector &goal) {
+  // Reset states
+  this->collided_ = false;
+  this->goal_reached_ = false;
+  this->diverged_ = false;
+  trajectory_ = std::make_unique<TrajectoryRMP<Space>>(start.pos_, start.vel_);
+
+  // as policies live in the world, we have to set the goal there
+  this->getWorld()->setGoal(goal);
+
+  // run integrator
   integrate();
-}
-
-template void rmpcpp::PlannerRMP<rmpcpp::Space<2>>::plan(
-    const rmpcpp::State<Space<2>::dim> &start);
-template void rmpcpp::PlannerRMP<rmpcpp::Space<3>>::plan(
-    const rmpcpp::State<Space<3>::dim> &start);
-
-/**
- * Get the shortest length to the goal
- * @tparam Space
- * @return Shortest length
- */
-template <class Space>
-double rmpcpp::PlannerRMP<Space>::getShortestLengthToGoal() {
-  /** Find the shortest trajectory */
-  double shortest = std::numeric_limits<double>::infinity();
-  rmpcpp::TrajectoryRMP<Space> *best = nullptr;
-  for (auto &goal_traj : reached_goal_trajectories) {
-    shortest = std::min(shortest, goal_traj->totalLength());
-  }
-  return shortest;
-}
-
-/**
- * Get the shortest discrete length to the goal, i.e. how many integration steps
- * for that trajectory
- * @tparam Space
- * @return
- */
-template <class Space>
-int rmpcpp::PlannerRMP<Space>::getShortestLengthToGoalDiscrete() {
-  /** Find the shortest(discrete) trajectory */
-  int shortest = std::numeric_limits<int>::max();
-  rmpcpp::TrajectoryRMP<Space> *best = nullptr;
-  for (auto &goal_traj : reached_goal_trajectories) {
-    shortest = std::min(shortest, goal_traj->totalLengthDiscrete());
-  }
-  return shortest;
-}
-
-template <class Space>
-double rmpcpp::PlannerRMP<Space>::getSmoothnessToGoal() {
-  /** Find the shortest trajectory */
-  double shortest = std::numeric_limits<double>::infinity();
-  rmpcpp::TrajectoryRMP<Space> *best = nullptr;
-  for (auto &goal_traj : reached_goal_trajectories) {
-    double length = goal_traj->totalLength();
-    if (length < shortest) {
-      shortest = length;
-      best = goal_traj;
-    }
-  }
-  int length = best->totalLengthDiscrete();
-
-  /** Now get the smoothness, and normalize by length */
-  return best->getSmoothness();  // / length; no normalization for aceleration
-                                 // based smoothness
 }

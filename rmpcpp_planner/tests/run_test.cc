@@ -21,3 +21,4 @@ int main(int argc, char* argv[]){
     Tester tester(parser.getParameters(), parser.getSettings());
     tester.run();
 }
+

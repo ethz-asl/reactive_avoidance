@@ -28,51 +28,48 @@ class WorldGen {
                            const float &r_std = 0.2);
 
   void reset();
-  void seed(int seed) { settings.seed = seed; };
+  void seed(int seed) { settings_.seed = seed; };
 
   void exportToPly(const std::string &path);
-  nvblox::TsdfLayer::Ptr getTsdfLayer() { return tsdf_layer; };
-  nvblox::EsdfLayer::Ptr getEsdfLayer() { return esdf_layer; };
+  nvblox::TsdfLayer::Ptr getTsdfLayer() { return tsdf_layer_; };
+  nvblox::EsdfLayer::Ptr getEsdfLayer() { return esdf_layer_; };
 
-  Eigen::Vector3d getStart() { return startpos; };
-  Eigen::Vector3d getGoal() { return goal; };
+  Eigen::Vector3d getStart() { return startpos_; };
+  Eigen::Vector3d getGoal() { return goal_; };
 
-  WorldType getWorldType() { return settings.world_type; };
+  WorldType getWorldType() { return settings_.world_type; };
 
-  std::pair<Eigen::Vector3d, Eigen::Vector3d> getLimits() {
-    return {settings.world_limits.first.cast<double>(),
-            settings.world_limits.second.cast<double>()};
+  inline std::pair<Eigen::Vector3d, Eigen::Vector3d> getLimits() {
+    return {settings_.world_limits.first.cast<double>(),
+            settings_.world_limits.second.cast<double>()};
   };
 
   double getDensity();
 
  private:
-  struct WorldGenSettings settings;
-  nvblox::primitives::Scene scene;
-  nvblox::TsdfLayer::Ptr tsdf_layer;
-
-  /** Generated from tsdf using the esdf integrator */
-  nvblox::EsdfLayer::Ptr esdf_layer;
-  nvblox::EsdfIntegrator esdf_integrator;
-
-  /** Used to export to ply file for visualization. Generated from tsdf using
-   * the mesh integrator */
-  nvblox::MeshIntegrator mesh_integrator;
-  nvblox::MeshLayer::Ptr mesh_layer;
-
-  std::default_random_engine generator;
-
   std::unique_ptr<nvblox::primitives::Sphere> getRandomSphere(const float &r,
                                                               const float &std);
   std::unique_ptr<nvblox::primitives::Cube> getRandomCube(const float &r,
                                                           const float &std);
-
   Eigen::Vector3d getRandomLocation();
-  Eigen::Vector3d getRandomLocationFreeSpace();
 
-  Eigen::Vector3d startpos = {1.0, 1.0, 1.0};
-  Eigen::Vector3d goal = {9.0, 9.0, 9.0};
-  std::string lastpath;
+  struct WorldGenSettings settings_;
+  nvblox::primitives::Scene scene_;
+  nvblox::TsdfLayer::Ptr tsdf_layer_;
+
+  /** Generated from tsdf using the esdf integrator */
+  nvblox::EsdfLayer::Ptr esdf_layer_;
+  nvblox::EsdfIntegrator esdf_integrator_;
+
+  /** Used to export to ply file for visualization. Generated from tsdf using
+   * the mesh integrator */
+  nvblox::MeshIntegrator mesh_integrator_;
+  nvblox::MeshLayer::Ptr mesh_layer_;
+
+  std::default_random_engine generator_;
+
+  Eigen::Vector3d startpos_ = {1.0, 1.0, 1.0};
+  Eigen::Vector3d goal_ = {9.0, 9.0, 9.0};
 };
 
 }  // namespace rmpcpp

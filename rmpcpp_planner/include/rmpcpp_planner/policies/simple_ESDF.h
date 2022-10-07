@@ -8,6 +8,10 @@
 
 namespace rmpcpp {
 
+/*
+ * Implements a policy that follows the obstacle gradient
+ * in an ESDF.
+ */
 template <class Space>
 class SimpleEsdfPolicy : public rmpcpp::WorldPolicyBase<Space> {
  public:
@@ -17,15 +21,15 @@ class SimpleEsdfPolicy : public rmpcpp::WorldPolicyBase<Space> {
   using PState = typename WorldPolicyBase<Space>::PState;
 
   SimpleEsdfPolicy(WorldPolicyParameters* parameters, nvblox::EsdfLayer* layer)
-      : layer(layer),
-        parameters(*dynamic_cast<EsdfPolicyParameters*>(parameters)){};
+      : layer_(layer),
+        parameters_(*dynamic_cast<EsdfPolicyParameters*>(parameters)){};
   ~SimpleEsdfPolicy() {}
 
   virtual PValue evaluateAt(const PState& state);
 
  private:
-  const nvblox::EsdfLayer* layer;
-  const EsdfPolicyParameters parameters;
+  const nvblox::EsdfLayer* layer_;
+  const EsdfPolicyParameters parameters_;
 };
 
 }  // namespace rmpcpp

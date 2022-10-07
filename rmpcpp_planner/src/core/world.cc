@@ -111,7 +111,7 @@ template bool rmpcpp::NVBloxWorld<rmpcpp::Space<2>>::checkMotion(
 template <>
 bool rmpcpp::NVBloxWorld<rmpcpp::Space<3>>::checkMotion(
     const Vector& s1, const Vector& s2) const {
-  if (collision(s2, this->tsdf_layer.get())) {
+  if (collision(s2, this->tsdf_layer_.get())) {
     return false;
   }
   if ((s2 - s1).norm() <
@@ -126,7 +126,7 @@ bool rmpcpp::NVBloxWorld<rmpcpp::Space<3>>::checkMotion(
   nvblox::SphereTracer st;
   st.params().maximum_ray_length_m = float((s2 - s1).norm());
   float t;
-  st.castOnGPU(ray, *tsdf_layer.get(), truncation_distance, &t);
+  st.castOnGPU(ray, *tsdf_layer_.get(), truncation_distance_, &t);
 
   /** We don't care about the returned bool of castOnGPU, just the distance */
   if (t < (s2 - s1).norm()) {
@@ -146,7 +146,7 @@ typename rmpcpp::NVBloxWorld<Space>::Vector
 rmpcpp::NVBloxWorld<Space>::gradientToObstacle(const Vector& pos) {
   bool succ;
   nvblox::EsdfVoxel voxel =
-      getVoxel<nvblox::EsdfVoxel>(pos, esdf_layer.get(), &succ);
+      getVoxel<nvblox::EsdfVoxel>(pos, esdf_layer_.get(), &succ);
   if (!succ) {
     return Vector::Ones();
   }
@@ -162,7 +162,7 @@ typename rmpcpp::NVBloxWorld<rmpcpp::Space<2>>::Vector
 rmpcpp::NVBloxWorld<rmpcpp::Space<2>>::gradientToObstacle(const Vector& pos) {
   bool succ;
   nvblox::EsdfVoxel voxel =
-      getVoxel<nvblox::EsdfVoxel>(pos, esdf_layer.get(), &succ);
+      getVoxel<nvblox::EsdfVoxel>(pos, esdf_layer_.get(), &succ);
   if (!succ) {
     return Vector::Zero();
   }

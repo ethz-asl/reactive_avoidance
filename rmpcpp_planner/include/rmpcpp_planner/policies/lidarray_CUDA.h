@@ -15,6 +15,9 @@ typedef Eigen::Matrix<float, 8, 1>
 typedef Eigen::Matrix<float, 3, 4>
     LidarPolicyDebugData;  // for overall, blockreduced debug data.
 
+/*
+ * Implements a lidar-based obstacle avoidance policy
+ */
 template <class Space>
 class LidarRayCudaPolicy : public rmpcpp::WorldPolicyBase<Space> {
  public:
@@ -33,65 +36,66 @@ class LidarRayCudaPolicy : public rmpcpp::WorldPolicyBase<Space> {
   LidarRayCudaPolicy(RaycastingCudaPolicyParameters parameters);
 
   ~LidarRayCudaPolicy() {
-    cudaStreamSynchronize(stream);
-    cudaStreamDestroy(stream);
-    cudaFree(metric_sum);
-    cudaFree(metric_x_force_sum);
+    cudaStreamSynchronize(stream_);
+    cudaStreamDestroy(stream_);
+    cudaFree(metric_sum_);
+    cudaFree(metric_x_force_sum_);
 
-    cudaFree(policy_debug_data_device);
-    cudaFree(policy_debug_data);
-    cudaFree(metric_sum_device);
-    cudaFree(metric_x_force_sum_device);
+    cudaFree(policy_debug_data_device_);
+    cudaFree(policy_debug_data_);
+    cudaFree(metric_sum_device_);
+    cudaFree(metric_x_force_sum_device_);
 
-    if (output_results) {
-      cudaFree(output_cloud);
+    if (output_results_) {
+      cudaFree(output_cloud_);
     }
   }
 
   void updateLidarData(const LidarData &lidar_data);
 
   inline void getPolicyDebugData(LidarPolicyDebugData *data) {
-    *data = *policy_debug_data;
+    *data = *policy_debug_data_;
   }
 
   inline size_t getDebugData(LidarRayDebugData *data, size_t max_size) {
-    if (!output_results) return false;
+    if (!output_results_) return false;
 
-    size_t size_to_copy = std::min(max_size, (unsigned long)parameters.N_sqrt *
-                                                 parameters.N_sqrt) *
+    size_t size_to_copy = std::min(max_size, (unsigned long)parameters_.N_sqrt *
+                                                 parameters_.N_sqrt) *
                           sizeof(LidarRayDebugData);
 
-    cudaMemcpy(data, output_cloud, size_to_copy, cudaMemcpyDeviceToHost);
+    cudaMemcpy(data, output_cloud_, size_to_copy, cudaMemcpyDeviceToHost);
     return size_to_copy;
   }
 
   inline void updateParams(RaycastingCudaPolicyParameters params) {
-    parameters = params;
+    parameters_ = params;
   }
   virtual PValue evaluateAt(const PState &state);
   virtual void startEvaluateAsync(const PState &state);
   virtual void abortEvaluateAsync();
 
  private:
-  RaycastingCudaPolicyParameters parameters;
   void cudaStartEval(const PState &state);
-  PState last_evaluated_state;
 
-  bool async_eval_started = false;
-  cudaStream_t stream;
+  RaycastingCudaPolicyParameters parameters_;
+  PState last_evaluated_state_;
 
-  size_t lidar_data_n_points = 0;
-  uint8_t *lidar_data_device = nullptr;
+  bool async_eval_started_ = false;
+  cudaStream_t stream_;
 
-  Eigen::Matrix3f *metric_sum_device = nullptr;
-  Eigen::Vector3f *metric_x_force_sum_device = nullptr;
-  Eigen::Matrix3f *metric_sum = nullptr;
-  Eigen::Vector3f *metric_x_force_sum = nullptr;
-  LidarPolicyDebugData *policy_debug_data = nullptr;
-  LidarPolicyDebugData *policy_debug_data_device = nullptr;
+  size_t lidar_data_n_points_ = 0;
+  uint8_t *lidar_data_device_ = nullptr;
 
-  bool output_results = true;
-  LidarRayDebugData *output_cloud;  // x,y,z, |f|,|A|,tbd
+  Eigen::Matrix3f *metric_sum_device_ = nullptr;
+  Eigen::Vector3f *metric_x_force_sum_device_ = nullptr;
+  Eigen::Matrix3f *metric_sum_ = nullptr;
+  Eigen::Vector3f *metric_x_force_sum_ = nullptr;
+  LidarPolicyDebugData *policy_debug_data_ = nullptr;
+  LidarPolicyDebugData *policy_debug_data_device_ = nullptr;
+
+  bool output_results_ = true;
+  LidarRayDebugData *output_cloud_ = nullptr;  // x,y,z, |f|,|A|,tbd
 };
 
 }  // namespace rmpcpp

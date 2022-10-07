@@ -7,6 +7,7 @@
 #include "rmpcpp_planner/core/parameters.h"
 #include "rmpcpp_planner/core/planner_rmp.h"
 #include "testing/settings.h"
+#include "testing/statistics.h"
 #include "testing/worldgen.h"
 
 struct ParametersWrapper {
@@ -33,33 +34,18 @@ class Tester {
   void run();
 
  private:
-  rmpcpp::WorldGen worldgen;
-  struct SuccessStats {
-    int successfulcount = 0;
-    std::vector<double> timings;
-    std::vector<int> total_integration_steps;
-    std::vector<double> integrations_per_sec;
-    std::vector<double> shortest_lengths;
-    std::vector<int> shortest_discrete_lengths;
-    std::vector<int> success;
-    std::vector<int> indices;
-    std::vector<double> smoothness;
-  } stats;
-
-  /** World densities */
-  std::vector<double> densities;
-
-  void run_single();
-  void update_success_stats();
-  ParametersWrapper parameters;
-  rmpcpp::TestSettings settings;
-  std::unique_ptr<rmpcpp::PlannerBase<Space>> planner;
-
+  void runSingle(size_t run_index);
+  void updateStats(int index, double map_density, double duration_s);
   void exportTrajectories(std::string path, const int i);
   void exportWorld(std::string path, const int i);
   void exportStats(std::string path);
+  std::string getMapName();
 
-  int run_index = 0;
+  rmpcpp::WorldGen worldgen_;
+  rmpcpp::RunStatistics statistics_;
+  ParametersWrapper parameters_;
+  rmpcpp::TestSettings settings_;
+  std::unique_ptr<rmpcpp::PlannerBase<Space>> planner_;
 };
 
 #endif  // RMPCPP_PLANNER_TESTER_H

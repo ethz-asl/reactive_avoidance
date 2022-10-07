@@ -9,6 +9,7 @@
 
 #define BLOCKSIZE 16
 
+// Lidar datapoint as output by an Ouster OS-1
 typedef struct LidarPointOuster {  //     Start     End     Size
   float x;                         //        0       3         4
   float y;                         //        4       7         4
@@ -34,6 +35,8 @@ typedef struct LidarPointOuster {  //     Start     End     Size
 } __attribute__((
     packed));  // important! we want same memory alignment as in the message
 
+
+// Lidar data point as used in Gazebo Rotors
 typedef struct LidarPointSim {  //     Start     End     Size
   float x;                      //        0       3         4
   float y;                      //        4       7         4
@@ -44,9 +47,16 @@ typedef struct LidarPointSim {  //     Start     End     Size
 
   __device__ inline Eigen::Vector3f ray() { return {x, y, z}; }
   __device__ inline float ray_length() { return ray().norm(); }
-} __attribute__((packed));
+} __attribute__((
+    packed));  // important! we want same memory alignment as in the message
 
-typedef LidarPointOuster LidarPoint;
+// Should be solved nicer in the future.
+#ifdef USE_OUSTER_LIDAR
+  typedef LidarPointOuster LidarPoint;
+#else
+  typedef LidarPointSim LidarPoint;
+#endif
+
 
 __global__ void raycastKernel(
     const Eigen::Vector3f vel, const uint8_t* lidar_data,
@@ -66,12 +76,11 @@ __global__ void raycastKernel(
   const unsigned int dimy = gridDim.y * blockDim.y;
   const unsigned int id = idx + idy * dimx;
 
-  LidarPoint* test = (LidarPoint*)lidar_data;
+  LidarPoint* point = (LidarPoint*)lidar_data;
 
-  float ray_length = test[id].ray_length();
-  // ray_length -= 0.45;
-  output_values[id].topRows<3>(0) = test[id].ray();
-  Eigen::Vector3f ray = test[id].ray().normalized();
+  float ray_length = point[id].ray_length();
+  output_values[id].topRows<3>(0) = point[id].ray();
+  Eigen::Vector3f ray = point[id].ray().normalized();
 
   Matrix A_obst, A;
   Vector metric_x_force;
@@ -79,7 +88,10 @@ __global__ void raycastKernel(
   rmpcpp::LidarPolicyDebugData policy_data;
 
   if (ray_length >= maximum_ray_length || id >= lidar_data_n_points ||
-      ray_length <= 0.5 || test[id].reflectivity <= 25) {
+      ray_length <= 0.2 || point[id].reflectivity <= 25) {
+    // (here we simply also filter out some of the obvious outliers.
+    // Exact numbers might depend on lidar model though.)
+
     /** No obstacle hit: return */
     A = Matrix::Zero();
     metric_x_force = Vector::Zero();
@@ -163,52 +175,46 @@ __global__ void raycastKernel(
 template <class Space>
 rmpcpp::LidarRayCudaPolicy<Space>::LidarRayCudaPolicy(
     RaycastingCudaPolicyParameters params)
-    : parameters(*dynamic_cast<RaycastingCudaPolicyParameters*>(&params)) {
-  cudaStreamCreate(&stream);
-  const int blockdim = parameters.N_sqrt / BLOCKSIZE;
-  /** Somehow trying to malloc device memory here and only deleting it at the
-   * end in the destructor, instead of redoing it every integration step does
-   * not work. So we only do this for the host memory, which does work
-   */
+    : parameters_(*dynamic_cast<RaycastingCudaPolicyParameters*>(&params)) {
+  cudaStreamCreate(&stream_);
+  const int blockdim = parameters_.N_sqrt / BLOCKSIZE;
+
   cudaDeviceSetLimit(cudaLimitPrintfFifoSize, 1024 * 1024 * 80);
 
-  cudaMallocHost(&metric_sum, sizeof(Eigen::Matrix3f) * blockdim * blockdim);
-  cudaMallocHost(&metric_x_force_sum,
+  cudaMallocHost(&metric_sum_, sizeof(Eigen::Matrix3f) * blockdim * blockdim);
+  cudaMallocHost(&metric_x_force_sum_,
                  sizeof(Eigen::Vector3f) * blockdim * blockdim);
-  cudaMallocHost(&policy_debug_data,
+  cudaMallocHost(&policy_debug_data_,
                  sizeof(rmpcpp::LidarPolicyDebugData) * blockdim * blockdim);
 
-  cudaMalloc(&policy_debug_data_device,
+  cudaMalloc(&policy_debug_data_device_,
              sizeof(rmpcpp::LidarPolicyDebugData) * blockdim * blockdim);
 
-  cudaMalloc((void**)&metric_sum_device,
+  cudaMalloc((void**)&metric_sum_device_,
              sizeof(Eigen::Matrix3f) * blockdim * blockdim);
-  cudaMalloc((void**)&metric_x_force_sum_device,
+  cudaMalloc((void**)&metric_x_force_sum_device_,
              sizeof(Eigen::Vector3f) * blockdim * blockdim);
-  cudaMalloc(&lidar_data_device,
-             sizeof(LidarPoint) * (parameters.N_sqrt * parameters.N_sqrt + 1));
+  cudaMalloc(
+      &lidar_data_device_,
+      sizeof(LidarPoint) * (parameters_.N_sqrt * parameters_.N_sqrt + 1));
 
-  // magic memory alignment? we'll see.
-  // to be cleaned up.
-  long residual = (long)lidar_data_device % sizeof(LidarPoint);
-  lidar_data_device += sizeof(LidarPoint) - residual;
+  // this is some hack (needed?) for memory alignment.
+  // Basically, we malloc one struct more than needed, an then shift
+  // around the initial pointer such that its memory address is aligned
+  // w.r.t to the size of the structure (i.e. every thread accesses an address
+  // that is  (modulo) sizeof(LidarPoint) = 0.
+  // there's probably nicer ways of doing this.
+  long residual = (long)lidar_data_device_ % sizeof(LidarPoint);
+  lidar_data_device_ += sizeof(LidarPoint) - residual;
 
-  std::cout << "start " << (long)lidar_data_device << std::endl;
-  std::cout << "length "
-            << (long)sizeof(LidarPoint) * parameters.N_sqrt * parameters.N_sqrt
-            << std::endl;
-  std::cout << "end "
-            << (long)lidar_data_device +
-                   sizeof(LidarPoint) * parameters.N_sqrt * parameters.N_sqrt
-            << std::endl;
-
-  if (output_results) {
-    cudaMalloc(&output_cloud, sizeof(LidarRayDebugData) *
-                                  (parameters.N_sqrt * parameters.N_sqrt + 1));
+  if (output_results_) {
+    cudaMalloc(&output_cloud_,
+               sizeof(LidarRayDebugData) *
+                   (parameters_.N_sqrt * parameters_.N_sqrt + 1));
 
     // manual alignment
-    output_results += sizeof(LidarRayDebugData) -
-                      ((long)output_results % sizeof(LidarRayDebugData));
+    output_results_ += sizeof(LidarRayDebugData) -
+                       ((long)output_results_ % sizeof(LidarRayDebugData));
   }
 }
 template rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<2>>::LidarRayCudaPolicy(
@@ -232,40 +238,40 @@ void rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<3>>::cudaStartEval(
   Eigen::Vector3f pos = state.pos_.cast<float>();
   Eigen::Vector3f vel = state.vel_.cast<float>();
 
-  const int blockdim = parameters.N_sqrt / BLOCKSIZE;
+  const int blockdim = parameters_.N_sqrt / BLOCKSIZE;
 
   constexpr dim3 kThreadsPerThreadBlock(BLOCKSIZE, BLOCKSIZE, 1);
   const dim3 num_blocks(blockdim, blockdim, 1);
 
-  raycastKernel<<<num_blocks, kThreadsPerThreadBlock, 0, stream>>>(
-      vel, lidar_data_device, lidar_data_n_points, metric_sum_device,
-      metric_x_force_sum_device, parameters.r * 10, parameters, true,
-      output_cloud, policy_debug_data_device);
+  raycastKernel<<<num_blocks, kThreadsPerThreadBlock, 0, stream_>>>(
+      vel, lidar_data_device_, lidar_data_n_points_, metric_sum_device_,
+      metric_x_force_sum_device_, parameters_.r * 10, parameters_, true,
+      output_cloud_, policy_debug_data_device_);
 }
 
 template <>
 void rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<3>>::updateLidarData(
     const LidarData& lidar_data) {
-  if (lidar_data.n_points > parameters.N_sqrt * parameters.N_sqrt) {
+  if (lidar_data.n_points > parameters_.N_sqrt * parameters_.N_sqrt) {
     std::cout << "WARNING POINT CLOUD TRUNCATION - got point cloud with "
               << lidar_data.n_points << " points" << std::endl;
   }
 
   if (sizeof(LidarPoint) != lidar_data.stride) {
     std::cout << "Point Stride mismatch, ignoring data." << std::endl;
-    lidar_data_n_points = 0;
+    lidar_data_n_points_ = 0;
     return;
   }
 
   size_t data_to_copy =
-      std::min(lidar_data.size, (unsigned long)parameters.N_sqrt *
-                                    parameters.N_sqrt * sizeof(LidarPoint));
-  lidar_data_n_points =
+      std::min(lidar_data.size, (unsigned long)parameters_.N_sqrt *
+                                    parameters_.N_sqrt * sizeof(LidarPoint));
+  lidar_data_n_points_ =
       std::min(lidar_data.n_points,
-               (unsigned long)parameters.N_sqrt * parameters.N_sqrt);
+               (unsigned long)parameters_.N_sqrt * parameters_.N_sqrt);
 
   // copy in new data.
-  cudaMemcpy(lidar_data_device, (void*)lidar_data.data, data_to_copy,
+  cudaMemcpy(lidar_data_device_, (void*)lidar_data.data, data_to_copy,
              cudaMemcpyHostToDevice);
 }
 
@@ -277,24 +283,24 @@ void rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<3>>::updateLidarData(
 template <>
 rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<3>>::PValue
 rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<3>>::evaluateAt(const PState& state) {
-  const int blockdim = parameters.N_sqrt / BLOCKSIZE;
+  const int blockdim = parameters_.N_sqrt / BLOCKSIZE;
 
-  if (!async_eval_started) {
+  if (!async_eval_started_) {
     cudaStartEval(state);
   }
   /** If an asynchronous eval was started, no check is done whether the state is
    * the same. (As for now this should never happen)*/
-  cudaStreamSynchronize(stream);
-  async_eval_started = false;
+  cudaStreamSynchronize(stream_);
+  async_eval_started_ = false;
 
-  cudaMemcpy(metric_sum, metric_sum_device,
+  cudaMemcpy(metric_sum_, metric_sum_device_,
              sizeof(Eigen::Matrix3f) * blockdim * blockdim,
              cudaMemcpyDeviceToHost);
-  cudaMemcpy(metric_x_force_sum, metric_x_force_sum_device,
+  cudaMemcpy(metric_x_force_sum_, metric_x_force_sum_device_,
              sizeof(Eigen::Vector3f) * blockdim * blockdim,
              cudaMemcpyDeviceToHost);
 
-  cudaMemcpy(policy_debug_data, policy_debug_data_device,
+  cudaMemcpy(policy_debug_data_, policy_debug_data_device_,
              sizeof(rmpcpp::LidarPolicyDebugData) * blockdim * blockdim,
              cudaMemcpyDeviceToHost);
 
@@ -303,10 +309,10 @@ rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<3>>::evaluateAt(const PState& state) {
   rmpcpp::LidarPolicyDebugData debug_data;
 
   for (int i = 0; i < blockdim * blockdim; i++) {
-    sum += metric_sum[i];
-    sumv += metric_x_force_sum[i];
+    sum += metric_sum_[i];
+    sumv += metric_x_force_sum_[i];
 
-    debug_data += policy_debug_data[i];
+    debug_data += policy_debug_data_[i];
   }
   if (sum.isZero(0.001)) {  // Check if not all values are 0, leading to
                             // unstable inverse
@@ -318,14 +324,14 @@ rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<3>>::evaluateAt(const PState& state) {
       sumd.completeOrthogonalDecomposition().pseudoInverse();
 
   Eigen::Vector3d f = sumd_inverse * sumv.cast<double>();
-  last_evaluated_state.pos_ = state.pos_;
-  last_evaluated_state.vel_ = state.vel_;
+  last_evaluated_state_.pos_ = state.pos_;
+  last_evaluated_state_.vel_ = state.vel_;
 
   // recover debug policies
   debug_data.col(0) /=
-      (parameters.N_sqrt * parameters.N_sqrt);  // no metric, just average
+      (parameters_.N_sqrt * parameters_.N_sqrt);  // no metric, just average
   debug_data.col(1) /=
-      (parameters.N_sqrt * parameters.N_sqrt);  // no metric, just average
+      (parameters_.N_sqrt * parameters_.N_sqrt);  // no metric, just average
   debug_data.col(2) = sumd_inverse.cast<float>() * debug_data.col(2);
   debug_data.col(3) = sumd_inverse.cast<float>() *
                       debug_data.col(3);  // multiply by inverse metric
@@ -354,7 +360,7 @@ template <class Space>
 void rmpcpp::LidarRayCudaPolicy<Space>::startEvaluateAsync(
     const PState& state) {
   cudaStartEval(state);
-  async_eval_started = true;
+  async_eval_started_ = true;
 }
 template void rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<2>>::startEvaluateAsync(
     const PState& state);
@@ -367,10 +373,10 @@ template void rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<3>>::startEvaluateAsync(
  */
 template <class Space>
 void rmpcpp::LidarRayCudaPolicy<Space>::abortEvaluateAsync() {
-  cudaStreamSynchronize(stream);
-  cudaFree(metric_sum_device);
-  cudaFree(metric_x_force_sum_device);
-  async_eval_started = false;
+  cudaStreamSynchronize(stream_);
+  cudaFree(metric_sum_device_);
+  cudaFree(metric_x_force_sum_device_);
+  async_eval_started_ = false;
 }
 template void
 rmpcpp::LidarRayCudaPolicy<rmpcpp::Space<2>>::abortEvaluateAsync();

@@ -16,7 +16,7 @@ rmpcpp::SimpleEsdfPolicy<rmpcpp::Space<3>>::evaluateAt(const PState& state) {
   std::vector<bool> succ = {false};
 
   /** Get voxel at the position of the state */
-  layer->getVoxels({pos.cast<float>()}, &voxels, &succ);
+  layer_->getVoxels({pos.cast<float>()}, &voxels, &succ);
   if (!succ[0]) {
     throw(std::runtime_error("Unable to evaluate simple ESDF policy\n"));
   }
@@ -30,15 +30,15 @@ rmpcpp::SimpleEsdfPolicy<rmpcpp::Space<3>>::evaluateAt(const PState& state) {
   Vector delta_d = -direction / direction.norm();
 
   Vector f_rep =
-      alpha_rep(distance, parameters.eta_rep, parameters.v_rep) * delta_d;
-  Vector f_damp = -alpha_damp(distance, parameters.eta_damp, parameters.v_damp,
-                              parameters.epsilon_damp) *
+      alpha_rep(distance, parameters_.eta_rep, parameters_.v_rep) * delta_d;
+  Vector f_damp = -alpha_damp(distance, parameters_.eta_damp,
+                              parameters_.v_damp, parameters_.epsilon_damp) *
                   std::max(0.0, double(-vel.transpose() * delta_d)) *
                   (delta_d * delta_d.transpose()) * vel;
   Vector f = f_rep + f_damp;
 
-  Vector f_norm = softnorm(f, parameters.c_softmax_obstacle);
-  Matrix A = w(distance, parameters.r) * f_norm * f_norm.transpose();
+  Vector f_norm = softnorm(f, parameters_.c_softmax_obstacle);
+  Matrix A = w(distance, parameters_.r) * f_norm * f_norm.transpose();
   return {f, A};
 }
 
@@ -54,7 +54,7 @@ rmpcpp::SimpleEsdfPolicy<rmpcpp::Space<2>>::evaluateAt(const PState& state) {
   std::vector<nvblox::EsdfVoxel> voxels;
   std::vector<bool> succ = {false};
 
-  layer->getVoxels({pos3d.cast<float>()}, &voxels, &succ);
+  layer_->getVoxels({pos3d.cast<float>()}, &voxels, &succ);
   if (!succ[0]) {
     throw(std::runtime_error("Unable to evaluate simple ESDF policy\n"));
   }
@@ -67,15 +67,15 @@ rmpcpp::SimpleEsdfPolicy<rmpcpp::Space<2>>::evaluateAt(const PState& state) {
   Vector delta_d = -direction / direction.norm();
 
   Vector f_rep =
-      alpha_rep(distance, parameters.eta_rep, parameters.v_rep, 0.0) * delta_d;
-  Vector f_damp = alpha_damp(distance, parameters.eta_damp, parameters.v_damp,
-                             parameters.epsilon_damp) *
+      alpha_rep(distance, parameters_.eta_rep, parameters_.v_rep, 0.0) * delta_d;
+  Vector f_damp = alpha_damp(distance, parameters_.eta_damp, parameters_.v_damp,
+                             parameters_.epsilon_damp) *
                   std::max(0.0, double(-vel.transpose() * delta_d)) *
                   (delta_d * delta_d.transpose()) * vel;
   Vector f = f_rep + f_damp;
 
-  Vector f_norm = softnorm(f, parameters.c_softmax_obstacle);
-  Matrix A = w(distance, parameters.r) * f_norm * f_norm.transpose();
+  Vector f_norm = softnorm(f, parameters_.c_softmax_obstacle);
+  Matrix A = w(distance, parameters_.r) * f_norm * f_norm.transpose();
   return {f, A};
   return {Vector::Zero(), Matrix::Identity()};
 }

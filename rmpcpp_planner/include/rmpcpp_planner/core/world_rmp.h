@@ -15,18 +15,21 @@ class NVBloxWorldRMP : public NVBloxWorld<Space> {
 
   explicit NVBloxWorldRMP(const ParametersRMP& parameters)
       : NVBloxWorld<Space>(parameters.truncation_distance_vox),
-        parameters(parameters){};
+        parameters_(parameters),
+        target_policy_(
+            std::make_shared<rmpcpp::SimpleTargetPolicy<Space>>(this->goal)){
+
+        };
 
   std::vector<std::shared_ptr<PolicyBase<Space>>> getPolicies();
 
   void setGoal(const Vector& new_goal) override;
 
  private:
-  const ParametersRMP& parameters;
-  std::shared_ptr<rmpcpp::WorldPolicyBase<Space>> world_policy;
+  const ParametersRMP& parameters_;
 
-  std::shared_ptr<rmpcpp::SimpleTargetPolicy<Space>> target_policy =
-      std::make_shared<rmpcpp::SimpleTargetPolicy<Space>>(this->goal);
+  std::shared_ptr<rmpcpp::WorldPolicyBase<Space>> world_policy_;
+  std::shared_ptr<rmpcpp::SimpleTargetPolicy<Space>> target_policy_;
 };
 
 }  // namespace rmpcpp

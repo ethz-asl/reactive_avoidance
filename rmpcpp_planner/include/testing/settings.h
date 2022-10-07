@@ -1,10 +1,11 @@
 #ifndef RMPCPP_PLANNER_SETTINGS_H
 #define RMPCPP_PLANNER_SETTINGS_H
 #include <Eigen/Dense>
+
 #include "nvblox/core/common_names.h"
 namespace rmpcpp {
 
-enum PlannerType { RMP, RRT, CHOMP };
+enum PlannerType { RMP };
 
 enum WorldType { SPHERES_ONLY_WORLD, SPHERES_BOX_WORLD, CUSTOM_WORLD };
 
