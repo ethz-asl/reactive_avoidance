@@ -1,9 +1,4 @@
-This is the __preliminary__ code release for ICRA Submission "Obstacle avoidance using raycasting and Riemannian Motion Policies at kHz                                                 rates for MAVs"
- 
-While all the code for the policies & planner is included, we will add easy-to-run examples and 
-documentation soon (and clean up the code).
- 
-### Please check back in approx 2-3 weeks. ###
+This is the code release for ICRA Submission "Obstacle avoidance using raycasting and Riemannian Motion Policies at kHz                                                 rates for MAVs"
 
 
 ## Prerequisites: 
